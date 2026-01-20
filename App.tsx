@@ -1,34 +1,29 @@
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Ticket, User, Version, PriorityOption, GanttConfig, TicketStatus } from './types';
 import { INITIAL_USERS, INITIAL_VERSIONS, INITIAL_PRIORITIES } from './constants';
 import GanttChart from './components/GanttChart';
 import TicketTable from './components/TicketTable';
 import TicketForm from './components/TicketForm';
 import MasterDataView from './components/MasterDataView';
-import { spreadsheetService, SpreadsheetInfo } from './services/spreadsheetService';
+import { ticketsToCsv, csvToTickets, downloadFile } from './utils/csvUtils';
 import { 
   Plus, 
   LayoutGrid, 
   GanttChartIcon, 
   Search, 
   Filter, 
-  ChevronDown,
-  Sparkles,
   RefreshCw,
-  Save,
-  CloudDownload,
+  Download,
+  Upload,
   CheckCircle,
-  AlertCircle,
   X,
   ArrowUpDown,
   Settings2,
   Loader2,
-  Link,
-  ExternalLink,
-  Database,
-  ShieldAlert,
-  Info
+  FileText,
+  Save,
+  Trash2
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -41,15 +36,11 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [lastSaved, setLastSaved] = useState<string | null>(null);
 
-  // スプレッドシート接続設定
-  const [targetSpreadsheet, setTargetSpreadsheet] = useState<SpreadsheetInfo | null>(null);
-  const [showConnectionModal, setShowConnectionModal] = useState(false);
-  const [inputSpreadsheetId, setInputSpreadsheetId] = useState('');
-  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [config, setConfig] = useState<GanttConfig>({
     zoom: 'day',
@@ -62,71 +53,60 @@ const App: React.FC = () => {
     sortOrder: 'asc'
   });
 
-  // データの読み込み
-  const fetchData = useCallback(async (ssId?: string) => {
-    setIsLoading(true);
-    setConnectionError(null);
-    try {
-      // 1. 接続テストと情報取得
-      const info = await spreadsheetService.getInfo(ssId);
-      setTargetSpreadsheet(info);
-      if (ssId) {
-        localStorage.setItem('smart_gantt_target_id', ssId);
-      } else {
-        localStorage.removeItem('smart_gantt_target_id');
-      }
-
-      // 2. データロード
-      const data = await spreadsheetService.loadData(ssId);
-      if (data.tickets) setTickets(data.tickets);
-      if (data.users && data.users.length > 0) setUsers(data.users);
-      if (data.versions && data.versions.length > 0) setVersions(data.versions);
-      if (data.priorities && data.priorities.length > 0) setPriorities(data.priorities);
-      
-      setShowConnectionModal(false);
-    } catch (e: any) {
-      console.error("Connection failed", e);
-      const msg = e.message || "不明な接続エラーが発生しました";
-      setConnectionError(msg);
-      setShowConnectionModal(true);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
+  // ローカルストレージからデータを読み込む
   useEffect(() => {
-    const savedId = localStorage.getItem('smart_gantt_target_id');
-    fetchData(savedId || undefined);
+    const savedTickets = localStorage.getItem('smart_gantt_tickets');
+    const savedUsers = localStorage.getItem('smart_gantt_users');
+    const savedVersions = localStorage.getItem('smart_gantt_versions');
+    const savedPriorities = localStorage.getItem('smart_gantt_priorities');
+
+    if (savedTickets) setTickets(JSON.parse(savedTickets));
+    if (savedUsers) setUsers(JSON.parse(savedUsers));
+    if (savedVersions) setVersions(JSON.parse(savedVersions));
+    if (savedPriorities) setPriorities(JSON.parse(savedPriorities));
+
+    setIsLoading(false);
   }, []);
 
-  const handleConnect = () => {
-    let id = inputSpreadsheetId.trim();
-    if (!id) {
-      fetchData(undefined);
-      return;
+  // データが変更されるたびにローカルストレージに自動保存
+  useEffect(() => {
+    if (!isLoading) {
+      localStorage.setItem('smart_gantt_tickets', JSON.stringify(tickets));
+      localStorage.setItem('smart_gantt_users', JSON.stringify(users));
+      localStorage.setItem('smart_gantt_versions', JSON.stringify(versions));
+      localStorage.setItem('smart_gantt_priorities', JSON.stringify(priorities));
+      setLastSaved(new Date().toLocaleTimeString());
     }
-    // URLからIDを抽出する正規表現
-    const match = id.match(/\/d\/([a-zA-Z0-9-_]+)/);
-    if (match) {
-      id = match[1];
-    }
-    fetchData(id);
+  }, [tickets, users, versions, priorities, isLoading]);
+
+  const handleExportCsv = () => {
+    const csvContent = ticketsToCsv(tickets);
+    downloadFile(csvContent, `tickets_${new Date().toISOString().split('T')[0]}.csv`, 'text/csv;charset=utf-8;');
   };
 
-  const handleSaveToSheet = async () => {
-    setIsProcessing(true);
-    try {
-      await spreadsheetService.saveAll(
-        { tickets, users, versions, priorities },
-        targetSpreadsheet?.id !== 'mock-id' ? targetSpreadsheet?.id : undefined
-      );
-      alert("スプレッドシートに保存しました");
-    } catch (e: any) {
-      console.error("Save error", e);
-      alert("保存に失敗しました: " + (e.message || ""));
-    } finally {
-      setIsProcessing(false);
-    }
+  const handleImportCsv = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      try {
+        const importedTickets = csvToTickets(text);
+        if (importedTickets.length > 0) {
+          if (confirm(`${importedTickets.length}件のチケットをインポートしますか？現在のデータは上書きされます。`)) {
+            setTickets(importedTickets);
+          }
+        } else {
+          alert("有効なチケットデータが見つかりませんでした。");
+        }
+      } catch (err) {
+        alert("CSVの解析に失敗しました。フォーマットを確認してください。");
+      }
+      // 同じファイルを再度選択できるようにリセット
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+    reader.readAsText(file);
   };
 
   const syncParentDates = useCallback((allTickets: Ticket[]): Ticket[] => {
@@ -197,9 +177,22 @@ const App: React.FC = () => {
   };
 
   const deleteTicket = (id: string) => {
-    setTickets(prev => syncParentDates(prev.filter(t => t.id !== id)));
-    setShowForm(false);
-    setSelectedTicket(null);
+    if (confirm("このチケットを削除してもよろしいですか？")) {
+      setTickets(prev => syncParentDates(prev.filter(t => t.id !== id)));
+      setShowForm(false);
+      setSelectedTicket(null);
+    }
+  };
+
+  const clearAllData = () => {
+    if (confirm("すべてのデータを削除して初期状態に戻しますか？この操作は取り消せません。")) {
+      setTickets([]);
+      setUsers(INITIAL_USERS);
+      setVersions(INITIAL_VERSIONS);
+      setPriorities(INITIAL_PRIORITIES);
+      localStorage.clear();
+      alert("データを初期化しました。");
+    }
   };
 
   const filteredTickets = useMemo(() => {
@@ -235,12 +228,11 @@ const App: React.FC = () => {
     });
   }, [tickets, config, searchQuery, users, versions]);
 
-  if (isLoading && !showConnectionModal) {
+  if (isLoading) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-gray-50 text-gray-500">
         <Loader2 className="animate-spin mb-4 text-blue-600" size={40} />
-        <p className="font-bold">スプレッドシートを読み込み中...</p>
-        <p className="text-xs text-gray-400 mt-2">{targetSpreadsheet?.name || '接続確認中'}</p>
+        <p className="font-bold">データを読み込み中...</p>
       </div>
     );
   }
@@ -255,34 +247,47 @@ const App: React.FC = () => {
             </div>
             <div>
               <h1 className="font-bold text-lg tracking-tight leading-none">SmartGantt</h1>
-              <p className="text-[10px] text-gray-400 font-medium tracking-widest uppercase mt-1">Spreadsheet Edition</p>
+              <p className="text-[10px] text-gray-400 font-medium tracking-widest uppercase mt-1">Local CSV Edition</p>
             </div>
           </div>
 
-          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-100 rounded-lg max-w-sm">
-            <Database size={14} className="text-gray-400" />
-            <div className="flex flex-col min-w-0">
-              <span className="text-[10px] text-gray-400 font-bold uppercase leading-none mb-1">Target Sheet</span>
-              <span className="text-xs font-bold truncate text-gray-700">{targetSpreadsheet?.name || 'Not Connected'}</span>
+          <div className="hidden md:flex items-center gap-4 border-l border-gray-100 pl-6">
+            <div className="flex items-center gap-1.5 text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">
+              <Save size={12} />
+              <span className="text-[10px] font-bold uppercase tracking-wider">Auto-Saved</span>
+              {lastSaved && <span className="text-[10px] font-medium opacity-70 ml-1">{lastSaved}</span>}
             </div>
-            <button 
-              onClick={() => { setInputSpreadsheetId(targetSpreadsheet?.id || ''); setShowConnectionModal(true); }}
-              className="ml-2 p-1 hover:bg-white rounded border border-transparent hover:border-gray-200 text-blue-600 transition-all"
-              title="接続先を変更"
-            >
-              <RefreshCw size={12} />
-            </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+           <input 
+              type="file" 
+              accept=".csv" 
+              ref={fileInputRef} 
+              onChange={handleImportCsv} 
+              className="hidden" 
+           />
            <button 
-              onClick={handleSaveToSheet} 
-              disabled={isProcessing}
-              className="flex items-center gap-2 px-4 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-all shadow-md shadow-emerald-100 disabled:opacity-50"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-2 px-4 py-1.5 text-xs font-bold text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 rounded-lg transition-all shadow-sm"
             >
-              {isProcessing ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />} 
-              保存
+              <Upload size={14} /> 
+              CSV読み込み
+            </button>
+           <button 
+              onClick={handleExportCsv}
+              className="flex items-center gap-2 px-4 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-all shadow-md shadow-blue-100"
+            >
+              <Download size={14} /> 
+              CSV書き出し
+            </button>
+            <button 
+              onClick={clearAllData}
+              className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+              title="データを初期化"
+            >
+              <Trash2 size={16} />
             </button>
         </div>
       </header>
@@ -297,7 +302,7 @@ const App: React.FC = () => {
               <LayoutGrid size={16} /> 一覧
             </button>
             <button onClick={() => setView('master')} className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${view === 'master' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>
-              <Settings2 size={16} /> マスタ
+              <Settings2 size={16} /> マスタ設定
             </button>
           </div>
 
@@ -378,73 +383,6 @@ const App: React.FC = () => {
           />
         )}
       </main>
-
-      {/* 接続先設定モーダル */}
-      {showConnectionModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !isLoading && setShowConnectionModal(false)} />
-          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl relative z-10 overflow-hidden border border-gray-200 animate-in zoom-in-95 duration-200">
-            <div className="p-6">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
-                  <Database size={24} />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold">スプレッドシート接続</h2>
-                  <p className="text-sm text-gray-500">データを保存するファイルを選択してください</p>
-                </div>
-              </div>
-
-              {connectionError && (
-                <div className="mb-4 p-4 bg-red-50 border border-red-100 rounded-xl flex gap-3 animate-in slide-in-from-top-2">
-                  <ShieldAlert className="text-red-500 shrink-0" size={18} />
-                  <div className="text-xs text-red-700 font-medium leading-relaxed">
-                    {connectionError}
-                  </div>
-                </div>
-              )}
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5">Spreadsheet ID or URL</label>
-                  <input 
-                    value={inputSpreadsheetId}
-                    onChange={(e) => setInputSpreadsheetId(e.target.value)}
-                    placeholder="https://docs.google.com/spreadsheets/d/..."
-                    disabled={isLoading}
-                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-100 transition-all disabled:bg-gray-50"
-                  />
-                  
-                  <div className="mt-4 p-3 bg-blue-50/50 rounded-lg flex gap-3">
-                    <Info className="text-blue-400 shrink-0" size={14} />
-                    <p className="text-[10px] text-blue-600 leading-relaxed">
-                      外部ファイルを指定する場合、そのファイルをスクリプト実行ユーザー（あなた）に共有し、編集権限を付与しておく必要があります。空欄にすると「現在開いているファイル」を使用します。
-                    </p>
-                  </div>
-                </div>
-
-                <div className="pt-2 flex flex-col gap-2">
-                  <button 
-                    onClick={handleConnect}
-                    disabled={isLoading}
-                    className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {isLoading ? <Loader2 className="animate-spin" size={18} /> : null}
-                    {isLoading ? '接続中...' : '接続して読み込む'}
-                  </button>
-                  <button 
-                    onClick={() => setShowConnectionModal(false)}
-                    disabled={isLoading}
-                    className="w-full py-3 text-gray-500 font-medium rounded-xl hover:bg-gray-50 transition-all disabled:opacity-30"
-                  >
-                    キャンセル
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {showForm && (
         <>
