@@ -6,7 +6,7 @@ import GanttChart from './components/GanttChart';
 import TicketTable from './components/TicketTable';
 import TicketForm from './components/TicketForm';
 import MasterDataView from './components/MasterDataView';
-import { spreadsheetService } from './services/spreadsheetService';
+import { spreadsheetService, SpreadsheetInfo } from './services/spreadsheetService';
 import { 
   Plus, 
   LayoutGrid, 
@@ -23,7 +23,12 @@ import {
   X,
   ArrowUpDown,
   Settings2,
-  Loader2
+  Loader2,
+  Link,
+  ExternalLink,
+  Database,
+  ShieldAlert,
+  Info
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -40,6 +45,12 @@ const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
 
+  // スプレッドシート接続設定
+  const [targetSpreadsheet, setTargetSpreadsheet] = useState<SpreadsheetInfo | null>(null);
+  const [showConnectionModal, setShowConnectionModal] = useState(false);
+  const [inputSpreadsheetId, setInputSpreadsheetId] = useState('');
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+
   const [config, setConfig] = useState<GanttConfig>({
     zoom: 'day',
     showResources: true,
@@ -51,32 +62,68 @@ const App: React.FC = () => {
     sortOrder: 'asc'
   });
 
-  // 初期データの読み込み
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const data = await spreadsheetService.loadData();
-        if (data.tickets && data.tickets.length > 0) setTickets(data.tickets);
-        if (data.users && data.users.length > 0) setUsers(data.users);
-        if (data.versions && data.versions.length > 0) setVersions(data.versions);
-        if (data.priorities && data.priorities.length > 0) setPriorities(data.priorities);
-      } catch (e) {
-        console.error("Failed to load spreadsheet data", e);
-      } finally {
-        setIsLoading(false);
+  // データの読み込み
+  const fetchData = useCallback(async (ssId?: string) => {
+    setIsLoading(true);
+    setConnectionError(null);
+    try {
+      // 1. 接続テストと情報取得
+      const info = await spreadsheetService.getInfo(ssId);
+      setTargetSpreadsheet(info);
+      if (ssId) {
+        localStorage.setItem('smart_gantt_target_id', ssId);
+      } else {
+        localStorage.removeItem('smart_gantt_target_id');
       }
-    };
-    fetchData();
+
+      // 2. データロード
+      const data = await spreadsheetService.loadData(ssId);
+      if (data.tickets) setTickets(data.tickets);
+      if (data.users && data.users.length > 0) setUsers(data.users);
+      if (data.versions && data.versions.length > 0) setVersions(data.versions);
+      if (data.priorities && data.priorities.length > 0) setPriorities(data.priorities);
+      
+      setShowConnectionModal(false);
+    } catch (e: any) {
+      console.error("Connection failed", e);
+      const msg = e.message || "不明な接続エラーが発生しました";
+      setConnectionError(msg);
+      setShowConnectionModal(true);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    const savedId = localStorage.getItem('smart_gantt_target_id');
+    fetchData(savedId || undefined);
+  }, []);
+
+  const handleConnect = () => {
+    let id = inputSpreadsheetId.trim();
+    if (!id) {
+      fetchData(undefined);
+      return;
+    }
+    // URLからIDを抽出する正規表現
+    const match = id.match(/\/d\/([a-zA-Z0-9-_]+)/);
+    if (match) {
+      id = match[1];
+    }
+    fetchData(id);
+  };
 
   const handleSaveToSheet = async () => {
     setIsProcessing(true);
     try {
-      await spreadsheetService.saveAll({ tickets, users, versions, priorities });
+      await spreadsheetService.saveAll(
+        { tickets, users, versions, priorities },
+        targetSpreadsheet?.id !== 'mock-id' ? targetSpreadsheet?.id : undefined
+      );
       alert("スプレッドシートに保存しました");
-    } catch (e) {
+    } catch (e: any) {
       console.error("Save error", e);
-      alert("保存に失敗しました");
+      alert("保存に失敗しました: " + (e.message || ""));
     } finally {
       setIsProcessing(false);
     }
@@ -131,7 +178,15 @@ const App: React.FC = () => {
           priorityId: priorities[0]?.id || '',
           assigneeId: '',
           versionId: '',
-          ...(formData as Ticket)
+          subject: '',
+          description: '',
+          status: 'New',
+          startDate: new Date().toISOString().split('T')[0],
+          dueDate: new Date().toISOString().split('T')[0],
+          progress: 0,
+          estimatedHours: 0,
+          parentId: null,
+          ...formData
         };
         updated = [...prev, newTicket];
       }
@@ -180,11 +235,12 @@ const App: React.FC = () => {
     });
   }, [tickets, config, searchQuery, users, versions]);
 
-  if (isLoading) {
+  if (isLoading && !showConnectionModal) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-gray-50 text-gray-500">
         <Loader2 className="animate-spin mb-4 text-blue-600" size={40} />
-        <p className="font-bold">スプレッドシートからデータを読み込み中...</p>
+        <p className="font-bold">スプレッドシートを読み込み中...</p>
+        <p className="text-xs text-gray-400 mt-2">{targetSpreadsheet?.name || '接続確認中'}</p>
       </div>
     );
   }
@@ -192,23 +248,41 @@ const App: React.FC = () => {
   return (
     <div className="flex flex-col h-screen overflow-hidden text-gray-800">
       <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6 shrink-0 z-30 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="bg-blue-600 p-2 rounded-lg text-white shadow-lg shadow-blue-200">
-            <GanttChartIcon size={20} />
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3">
+            <div className="bg-blue-600 p-2 rounded-lg text-white shadow-lg shadow-blue-200">
+              <GanttChartIcon size={20} />
+            </div>
+            <div>
+              <h1 className="font-bold text-lg tracking-tight leading-none">SmartGantt</h1>
+              <p className="text-[10px] text-gray-400 font-medium tracking-widest uppercase mt-1">Spreadsheet Edition</p>
+            </div>
           </div>
-          <div>
-            <h1 className="font-bold text-lg tracking-tight leading-none">SmartGantt</h1>
-            <p className="text-[10px] text-gray-400 font-medium tracking-widest uppercase mt-1">Spreadsheet Edition</p>
+
+          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-100 rounded-lg max-w-sm">
+            <Database size={14} className="text-gray-400" />
+            <div className="flex flex-col min-w-0">
+              <span className="text-[10px] text-gray-400 font-bold uppercase leading-none mb-1">Target Sheet</span>
+              <span className="text-xs font-bold truncate text-gray-700">{targetSpreadsheet?.name || 'Not Connected'}</span>
+            </div>
+            <button 
+              onClick={() => { setInputSpreadsheetId(targetSpreadsheet?.id || ''); setShowConnectionModal(true); }}
+              className="ml-2 p-1 hover:bg-white rounded border border-transparent hover:border-gray-200 text-blue-600 transition-all"
+              title="接続先を変更"
+            >
+              <RefreshCw size={12} />
+            </button>
           </div>
         </div>
+
         <div className="flex items-center gap-4">
            <button 
               onClick={handleSaveToSheet} 
               disabled={isProcessing}
-              className="flex items-center gap-2 px-4 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-all disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-all shadow-md shadow-emerald-100 disabled:opacity-50"
             >
               {isProcessing ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />} 
-              シートに保存
+              保存
             </button>
         </div>
       </header>
@@ -223,7 +297,7 @@ const App: React.FC = () => {
               <LayoutGrid size={16} /> 一覧
             </button>
             <button onClick={() => setView('master')} className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${view === 'master' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>
-              <Settings2 size={16} /> マスタ設定
+              <Settings2 size={16} /> マスタ
             </button>
           </div>
 
@@ -248,9 +322,9 @@ const App: React.FC = () => {
               </div>
               <button 
                 onClick={() => { setSelectedTicket(null); setShowForm(true); }}
-                className="flex items-center gap-2 px-5 py-2 bg-gray-900 text-white rounded-xl text-sm font-bold hover:bg-black transition-all"
+                className="flex items-center gap-2 px-5 py-2 bg-gray-900 text-white rounded-xl text-sm font-bold hover:bg-black transition-all shadow-lg shadow-gray-200"
               >
-                <Plus size={18} /> 新規チケット
+                <Plus size={18} /> 新規作成
               </button>
             </>
           )}
@@ -304,6 +378,73 @@ const App: React.FC = () => {
           />
         )}
       </main>
+
+      {/* 接続先設定モーダル */}
+      {showConnectionModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !isLoading && setShowConnectionModal(false)} />
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl relative z-10 overflow-hidden border border-gray-200 animate-in zoom-in-95 duration-200">
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+                  <Database size={24} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold">スプレッドシート接続</h2>
+                  <p className="text-sm text-gray-500">データを保存するファイルを選択してください</p>
+                </div>
+              </div>
+
+              {connectionError && (
+                <div className="mb-4 p-4 bg-red-50 border border-red-100 rounded-xl flex gap-3 animate-in slide-in-from-top-2">
+                  <ShieldAlert className="text-red-500 shrink-0" size={18} />
+                  <div className="text-xs text-red-700 font-medium leading-relaxed">
+                    {connectionError}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5">Spreadsheet ID or URL</label>
+                  <input 
+                    value={inputSpreadsheetId}
+                    onChange={(e) => setInputSpreadsheetId(e.target.value)}
+                    placeholder="https://docs.google.com/spreadsheets/d/..."
+                    disabled={isLoading}
+                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-100 transition-all disabled:bg-gray-50"
+                  />
+                  
+                  <div className="mt-4 p-3 bg-blue-50/50 rounded-lg flex gap-3">
+                    <Info className="text-blue-400 shrink-0" size={14} />
+                    <p className="text-[10px] text-blue-600 leading-relaxed">
+                      外部ファイルを指定する場合、そのファイルをスクリプト実行ユーザー（あなた）に共有し、編集権限を付与しておく必要があります。空欄にすると「現在開いているファイル」を使用します。
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-2 flex flex-col gap-2">
+                  <button 
+                    onClick={handleConnect}
+                    disabled={isLoading}
+                    className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isLoading ? <Loader2 className="animate-spin" size={18} /> : null}
+                    {isLoading ? '接続中...' : '接続して読み込む'}
+                  </button>
+                  <button 
+                    onClick={() => setShowConnectionModal(false)}
+                    disabled={isLoading}
+                    className="w-full py-3 text-gray-500 font-medium rounded-xl hover:bg-gray-50 transition-all disabled:opacity-30"
+                  >
+                    キャンセル
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showForm && (
         <>

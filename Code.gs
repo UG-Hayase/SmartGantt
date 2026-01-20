@@ -20,16 +20,65 @@ function showSidebar() {
 }
 
 /**
+ * 指定されたIDのスプレッドシート情報を取得（接続確認用）
+ */
+function getSpreadsheetInfo(spreadsheetId) {
+  try {
+    const ss = spreadsheetId ? SpreadsheetApp.openById(spreadsheetId) : SpreadsheetApp.getActiveSpreadsheet();
+    
+    // 必要なシートの存在確認と作成
+    const requiredSheets = ['Tickets', 'Users', 'Versions', 'Priorities'];
+    requiredSheets.forEach(name => {
+      if (!ss.getSheetByName(name)) {
+        ss.insertSheet(name);
+        // ヘッダーの初期化
+        const sheet = ss.getSheetByName(name);
+        if (name === 'Tickets') {
+          sheet.appendRow(['id', 'subject', 'description', 'status', 'priorityId', 'assigneeId', 'versionId', 'parentId', 'startDate', 'dueDate', 'progress', 'estimatedHours']);
+        } else if (name === 'Users') {
+          sheet.appendRow(['id', 'name', 'avatar']);
+        } else if (name === 'Versions') {
+          sheet.appendRow(['id', 'name']);
+        } else if (name === 'Priorities') {
+          sheet.appendRow(['id', 'name', 'color']);
+        }
+      }
+    });
+
+    return {
+      id: ss.getId(),
+      name: ss.getName(),
+      url: ss.getUrl(),
+      sheets: ss.getSheets().map(s => s.getName())
+    };
+  } catch (e) {
+    // 具体的なエラーメッセージをフロントに返す
+    const errorMsg = e.message || e.toString();
+    if (errorMsg.includes('not found')) {
+      throw new Error("スプレッドシートが見つかりません。IDが正しいか確認してください。");
+    } else if (errorMsg.includes('permission') || errorMsg.includes('Access denied')) {
+      throw new Error("アクセス権限がありません。このファイルをスクリプト実行ユーザーに共有してください。");
+    } else {
+      throw new Error("接続エラー: " + errorMsg);
+    }
+  }
+}
+
+/**
  * シートから全データを取得
  */
-function getProjectData() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  return {
-    tickets: getSheetDataAsJson(ss.getSheetByName('Tickets')),
-    users: getSheetDataAsJson(ss.getSheetByName('Users')),
-    versions: getSheetDataAsJson(ss.getSheetByName('Versions')),
-    priorities: getSheetDataAsJson(ss.getSheetByName('Priorities'))
-  };
+function getProjectData(spreadsheetId) {
+  try {
+    const ss = spreadsheetId ? SpreadsheetApp.openById(spreadsheetId) : SpreadsheetApp.getActiveSpreadsheet();
+    return {
+      tickets: getSheetDataAsJson(ss.getSheetByName('Tickets')),
+      users: getSheetDataAsJson(ss.getSheetByName('Users')),
+      versions: getSheetDataAsJson(ss.getSheetByName('Versions')),
+      priorities: getSheetDataAsJson(ss.getSheetByName('Priorities'))
+    };
+  } catch (e) {
+    throw new Error("データの取得に失敗しました: " + e.message);
+  }
 }
 
 /**
@@ -47,9 +96,9 @@ function getSheetDataAsJson(sheet) {
     const obj = {};
     headers.forEach((header, i) => {
       let val = row[i];
-      // 日付オブジェクトを文字列(YYYY-MM-DD)に変換
       if (val instanceof Date) {
-        val = val.toISOString().split('T')[0];
+        // ISO 8601形式で日付を扱う
+        val = Utilities.formatDate(val, Session.getScriptTimeZone(), "yyyy-MM-dd");
       }
       obj[header] = val;
     });
@@ -60,19 +109,23 @@ function getSheetDataAsJson(sheet) {
 /**
  * 全データをシートに保存
  */
-function saveAllData(payload) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const data = JSON.parse(payload);
-  
-  updateSheetFromData(ss.getSheetByName('Tickets'), data.tickets, [
-    'id', 'subject', 'description', 'status', 'priorityId', 'assigneeId', 
-    'versionId', 'parentId', 'startDate', 'dueDate', 'progress', 'estimatedHours'
-  ]);
-  updateSheetFromData(ss.getSheetByName('Users'), data.users, ['id', 'name', 'avatar']);
-  updateSheetFromData(ss.getSheetByName('Versions'), data.versions, ['id', 'name']);
-  updateSheetFromData(ss.getSheetByName('Priorities'), data.priorities, ['id', 'name', 'color']);
-  
-  return "Success";
+function saveAllData(payload, spreadsheetId) {
+  try {
+    const ss = spreadsheetId ? SpreadsheetApp.openById(spreadsheetId) : SpreadsheetApp.getActiveSpreadsheet();
+    const data = JSON.parse(payload);
+    
+    updateSheetFromData(ss.getSheetByName('Tickets'), data.tickets, [
+      'id', 'subject', 'description', 'status', 'priorityId', 'assigneeId', 
+      'versionId', 'parentId', 'startDate', 'dueDate', 'progress', 'estimatedHours'
+    ]);
+    updateSheetFromData(ss.getSheetByName('Users'), data.users, ['id', 'name', 'avatar']);
+    updateSheetFromData(ss.getSheetByName('Versions'), data.versions, ['id', 'name']);
+    updateSheetFromData(ss.getSheetByName('Priorities'), data.priorities, ['id', 'name', 'color']);
+    
+    return "Success";
+  } catch (e) {
+    throw new Error("保存に失敗しました: " + e.message);
+  }
 }
 
 /**
@@ -82,8 +135,13 @@ function updateSheetFromData(sheet, items, headers) {
   if (!sheet) return;
   sheet.clearContents();
   sheet.appendRow(headers);
-  if (items.length === 0) return;
+  if (!items || items.length === 0) return;
   
-  const values = items.map(item => headers.map(h => item[h] || ''));
+  const values = items.map(item => headers.map(h => {
+    const val = item[h];
+    // 空の値やnullは空文字にする
+    return (val === null || val === undefined) ? '' : val;
+  }));
+  
   sheet.getRange(2, 1, values.length, headers.length).setValues(values);
 }

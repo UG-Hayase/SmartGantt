@@ -4,14 +4,37 @@ declare const google: any;
 
 import { Ticket, User, Version, PriorityOption } from '../types';
 
+export interface SpreadsheetInfo {
+  id: string;
+  name: string;
+  url: string;
+  sheets: string[];
+}
+
 /**
  * Google Apps Scriptとの通信を管理するサービス
  */
 export const spreadsheetService = {
   /**
+   * 指定されたスプレッドシートの情報を取得
+   */
+  async getInfo(id?: string): Promise<SpreadsheetInfo> {
+    return new Promise((resolve, reject) => {
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler((info: SpreadsheetInfo) => resolve(info))
+          .withFailureHandler((err: any) => reject(err))
+          .getSpreadsheetInfo(id || null);
+      } else {
+        resolve({ id: 'mock-id', name: 'Local Mock Spreadsheet', url: '#', sheets: [] });
+      }
+    });
+  },
+
+  /**
    * スプレッドシートから全データを取得
    */
-  async loadData(): Promise<{
+  async loadData(spreadsheetId?: string): Promise<{
     tickets: Ticket[];
     users: User[];
     versions: Version[];
@@ -22,15 +45,13 @@ export const spreadsheetService = {
         google.script.run
           .withSuccessHandler((data: any) => resolve(data))
           .withFailureHandler((err: any) => reject(err))
-          .getProjectData();
+          .getProjectData(spreadsheetId || null);
       } else {
-        // ローカル開発環境用のモック
         console.warn('GAS environment not found. Using local storage/mock.');
         const saved = localStorage.getItem('smart_gantt_mock');
         if (saved) {
           resolve(JSON.parse(saved));
         } else {
-          // 初期値が必要な場合はここで返すか、App.tsx側でハンドリング
           resolve({ tickets: [], users: [], versions: [], priorities: [] });
         }
       }
@@ -45,16 +66,15 @@ export const spreadsheetService = {
     users: User[];
     versions: Version[];
     priorities: PriorityOption[];
-  }): Promise<string> {
+  }, spreadsheetId?: string): Promise<string> {
     return new Promise((resolve, reject) => {
       const payload = JSON.stringify(data);
       if (typeof google !== 'undefined' && google.script && google.script.run) {
         google.script.run
           .withSuccessHandler((res: string) => resolve(res))
           .withFailureHandler((err: any) => reject(err))
-          .saveAllData(payload);
+          .saveAllData(payload, spreadsheetId || null);
       } else {
-        // ローカル開発環境用のモック
         localStorage.setItem('smart_gantt_mock', payload);
         setTimeout(() => resolve("Saved to local storage"), 500);
       }
