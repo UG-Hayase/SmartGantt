@@ -6,13 +6,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, ".", "");
 
   return {
-    // š GitHub Pages ‚Å•K{
     base: "./",
-
-    server: {
-      port: 3000,
-      host: "0.0.0.0",
-    },
 
     plugins: [react()],
 
@@ -27,9 +21,8 @@ export default defineConfig(({ mode }) => {
       },
     },
 
-    // ”O‚Ì‚½‚ßi‚È‚­‚Ä‚àOKj
     build: {
-      outDir: "dist",
+      outDir: "docs",   // š dist ¨ docs
       emptyOutDir: true,
     },
   };
