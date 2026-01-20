@@ -1,0 +1,5 @@
+{
+  "name": "SmartGantt for Sheets",
+  "description": "A Redmine-inspired Gantt chart tool for managing complex projects with drag-and-drop scheduling, parent-child hierarchies, and AI-powered task optimization.",
+  "requestFramePermissions": []
+}
