@@ -3,6 +3,24 @@ import React, { useState } from 'react';
 import { User, Version, PriorityOption } from '../types';
 import { Plus, Trash2, UserPlus, Tag, AlertTriangle } from 'lucide-react';
 
+interface SectionProps {
+  title: string;
+  icon: React.ElementType;
+  children: React.ReactNode;
+}
+
+const Section: React.FC<SectionProps> = ({ title, icon: Icon, children }) => (
+  <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col h-full">
+    <div className="flex items-center gap-2 mb-4 border-b border-gray-100 pb-3">
+      <div className="p-2 bg-gray-50 rounded-lg text-gray-500"><Icon size={18} /></div>
+      <h3 className="font-bold text-gray-800">{title}</h3>
+    </div>
+    <div className="flex-1 overflow-y-auto space-y-2 mb-4">
+      {children}
+    </div>
+  </div>
+);
+
 interface MasterDataViewProps {
   users: User[];
   versions: Version[];
@@ -38,18 +56,6 @@ const MasterDataView: React.FC<MasterDataViewProps> = ({
     else if (type === 'version') onUpdateVersions(versions.filter(v => v.id !== id));
     else if (type === 'priority') onUpdatePriorities(priorities.filter(p => p.id !== id));
   };
-
-  const Section = ({ title, icon: Icon, children }: { title: string, icon: any, children: React.ReactNode }) => (
-    <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col h-full">
-      <div className="flex items-center gap-2 mb-4 border-b border-gray-100 pb-3">
-        <div className="p-2 bg-gray-50 rounded-lg text-gray-500"><Icon size={18} /></div>
-        <h3 className="font-bold text-gray-800">{title}</h3>
-      </div>
-      <div className="flex-1 overflow-y-auto space-y-2 mb-4">
-        {children}
-      </div>
-    </div>
-  );
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in slide-in-from-bottom-4 duration-300">
