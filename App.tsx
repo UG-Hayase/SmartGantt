@@ -13,18 +13,18 @@ import {
   GanttChartIcon, 
   Search, 
   Filter, 
-  RefreshCw,
   Download,
   Upload,
-  CheckCircle,
-  X,
-  ArrowUpDown,
+  Save,
+  Trash2,
   Settings2,
   Loader2,
-  FileText,
-  Save,
-  Trash2
+  History,
+  Code2
 } from 'lucide-react';
+
+// ソースコードの最終更新日時（生成日時）: 最新の出力時間を反映
+const APP_SOURCE_UPDATED_AT = "2026/01/21 17:50:00";
 
 const App: React.FC = () => {
   const [view, setView] = useState<'gantt' | 'table' | 'master'>('gantt');
@@ -38,7 +38,11 @@ const App: React.FC = () => {
   const [showForm, setShowForm] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+
+  // ステータスタイミング管理
   const [lastSaved, setLastSaved] = useState<string | null>(null);
+  const [lastExported, setLastExported] = useState<string | null>(null);
+  const [lastImported, setLastImported] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -59,11 +63,17 @@ const App: React.FC = () => {
     const savedUsers = localStorage.getItem('smart_gantt_users');
     const savedVersions = localStorage.getItem('smart_gantt_versions');
     const savedPriorities = localStorage.getItem('smart_gantt_priorities');
+    
+    const savedExported = localStorage.getItem('smart_gantt_last_exported');
+    const savedImported = localStorage.getItem('smart_gantt_last_imported');
 
     if (savedTickets) setTickets(JSON.parse(savedTickets));
     if (savedUsers) setUsers(JSON.parse(savedUsers));
     if (savedVersions) setVersions(JSON.parse(savedVersions));
     if (savedPriorities) setPriorities(JSON.parse(savedPriorities));
+    
+    if (savedExported) setLastExported(savedExported);
+    if (savedImported) setLastImported(savedImported);
 
     setIsLoading(false);
   }, []);
@@ -75,13 +85,27 @@ const App: React.FC = () => {
       localStorage.setItem('smart_gantt_users', JSON.stringify(users));
       localStorage.setItem('smart_gantt_versions', JSON.stringify(versions));
       localStorage.setItem('smart_gantt_priorities', JSON.stringify(priorities));
-      setLastSaved(new Date().toLocaleTimeString());
+      
+      // 日付と時間（秒まで）をフォーマット
+      const now = new Date().toLocaleString('ja-JP', { 
+        year: 'numeric', 
+        month: '2-digit', 
+        day: '2-digit', 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit' 
+      });
+      setLastSaved(now);
     }
   }, [tickets, users, versions, priorities, isLoading]);
 
   const handleExportCsv = () => {
     const csvContent = ticketsToCsv(tickets);
     downloadFile(csvContent, `tickets_${new Date().toISOString().split('T')[0]}.csv`, 'text/csv;charset=utf-8;');
+    
+    const now = new Date().toLocaleString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    setLastExported(now);
+    localStorage.setItem('smart_gantt_last_exported', now);
   };
 
   const handleImportCsv = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -96,6 +120,9 @@ const App: React.FC = () => {
         if (importedTickets.length > 0) {
           if (confirm(`${importedTickets.length}件のチケットをインポートしますか？現在のデータは上書きされます。`)) {
             setTickets(importedTickets);
+            const now = new Date().toLocaleString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            setLastImported(now);
+            localStorage.setItem('smart_gantt_last_imported', now);
           }
         } else {
           alert("有効なチケットデータが見つかりませんでした。");
@@ -103,7 +130,6 @@ const App: React.FC = () => {
       } catch (err) {
         alert("CSVの解析に失敗しました。フォーマットを確認してください。");
       }
-      // 同じファイルを再度選択できるようにリセット
       if (fileInputRef.current) fileInputRef.current.value = '';
     };
     reader.readAsText(file);
@@ -191,6 +217,8 @@ const App: React.FC = () => {
       setVersions(INITIAL_VERSIONS);
       setPriorities(INITIAL_PRIORITIES);
       localStorage.clear();
+      setLastExported(null);
+      setLastImported(null);
       alert("データを初期化しました。");
     }
   };
@@ -239,7 +267,7 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col h-screen overflow-hidden text-gray-800">
-      <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6 shrink-0 z-30 shadow-sm">
+      <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shrink-0 z-30 shadow-sm">
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-3">
             <div className="bg-blue-600 p-2 rounded-lg text-white shadow-lg shadow-blue-200">
@@ -247,48 +275,58 @@ const App: React.FC = () => {
             </div>
             <div>
               <h1 className="font-bold text-lg tracking-tight leading-none">SmartGantt</h1>
-              <p className="text-[10px] text-gray-400 font-medium tracking-widest uppercase mt-1">Local CSV Edition</p>
+              <p className="text-[10px] text-gray-400 font-medium tracking-widest uppercase mt-1">Local Edition</p>
             </div>
           </div>
 
-          <div className="hidden md:flex items-center gap-4 border-l border-gray-100 pl-6">
-            <div className="flex items-center gap-1.5 text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">
-              <Save size={12} />
-              <span className="text-[10px] font-bold uppercase tracking-wider">Auto-Saved</span>
-              {lastSaved && <span className="text-[10px] font-medium opacity-70 ml-1">{lastSaved}</span>}
-            </div>
+          {/* 自動保存表示 - ファイル名の右側 */}
+          <div className="flex items-center gap-1.5 text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
+            <Save size={10} />
+            <span className="text-[9px] font-bold uppercase tracking-wider hidden sm:inline">Auto-Saved:</span>
+            <span className="text-[10px] font-mono font-medium">{lastSaved || '--/--/-- --:--:--'}</span>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-           <input 
-              type="file" 
-              accept=".csv" 
-              ref={fileInputRef} 
-              onChange={handleImportCsv} 
-              className="hidden" 
-           />
-           <button 
-              onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-2 px-4 py-1.5 text-xs font-bold text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 rounded-lg transition-all shadow-sm"
-            >
-              <Upload size={14} /> 
-              CSV読み込み
-            </button>
-           <button 
-              onClick={handleExportCsv}
-              className="flex items-center gap-2 px-4 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-all shadow-md shadow-blue-100"
-            >
-              <Download size={14} /> 
-              CSV書き出し
-            </button>
+        <div className="flex items-center gap-4">
+          {/* ソースコード更新日時 - インポート/エクスポートの左側 */}
+          <div className="flex items-center gap-1.5 text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full border border-gray-200">
+            <Code2 size={10} />
+            <span className="text-[9px] font-bold uppercase tracking-wider hidden sm:inline">Source:</span>
+            <span className="text-[10px] font-mono font-medium">{APP_SOURCE_UPDATED_AT}</span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <input 
+                type="file" 
+                accept=".csv" 
+                ref={fileInputRef} 
+                onChange={handleImportCsv} 
+                className="hidden" 
+            />
+            <div className="flex items-center bg-gray-50 p-1 rounded-xl border border-gray-200">
+              <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold text-gray-600 hover:bg-white hover:shadow-sm rounded-lg transition-all"
+                >
+                  <Upload size={14} /> 
+                  <span className="hidden sm:inline">インポート</span>
+                </button>
+              <button 
+                  onClick={handleExportCsv}
+                  className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold text-blue-600 hover:bg-white hover:shadow-sm rounded-lg transition-all"
+                >
+                  <Download size={14} /> 
+                  <span className="hidden sm:inline">エクスポート</span>
+                </button>
+            </div>
             <button 
               onClick={clearAllData}
-              className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+              className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all border border-transparent hover:border-red-100"
               title="データを初期化"
             >
-              <Trash2 size={16} />
+              <Trash2 size={18} />
             </button>
+          </div>
         </div>
       </header>
 
@@ -383,6 +421,25 @@ const App: React.FC = () => {
           />
         )}
       </main>
+
+      <footer className="h-8 bg-white border-t border-gray-200 px-6 flex items-center justify-between shrink-0 text-[10px] text-gray-400 font-medium">
+        <div className="flex gap-4">
+          <span>チケット数: {tickets.length}件</span>
+          <span>リソース数: {users.length}名</span>
+          {lastImported && <span className="flex items-center gap-1"><Upload size={10} /> 最終読込: {lastImported}</span>}
+          {lastExported && <span className="flex items-center gap-1"><Download size={10} /> 最終書出: {lastExported}</span>}
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1">
+            <Code2 size={10} />
+            Source: {APP_SOURCE_UPDATED_AT}
+          </div>
+          <div className="flex items-center gap-1">
+            <History size={10} />
+            最終自動同期: {lastSaved || '未同期'}
+          </div>
+        </div>
+      </footer>
 
       {showForm && (
         <>
