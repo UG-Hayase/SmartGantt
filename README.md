@@ -1,20 +1,40 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
 
-# Run and deploy your AI Studio app
+# SmartGantt Local Edition
 
-This contains everything you need to run your app locally.
+Redmine風のガントチャートツールです。Google Sheets連携の代わりに、ブラウザのローカルストレージとCSVファイルエクスポート/インポートを使用して動作します。
 
-View your app in AI Studio: https://ai.studio/apps/drive/124O_T2GCNav2NrzhxBD3iGx6o4gDjsfJ
+## 🚀 セットアップ手順
 
-## Run Locally
+1. **リポジトリのクローン**
+   ```bash
+   git clone <your-repo-url>
+   cd smart-gantt-local
+   ```
 
-**Prerequisites:**  Node.js
+2. **依存関係のインストール**
+   ```bash
+   npm install
+   ```
 
+3. **ローカル開発サーバーの起動**
+   ```bash
+   npm run dev
+   ```
+   ブラウザで `http://localhost:3000` を開きます。
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## 📦 ビルドと公開
+
+1. **ビルド**
+   ```bash
+   npm run build
+   ```
+   `dist` フォルダに公開用の静的ファイルが生成されます。
+
+2. **GitHub Pagesへの公開**
+   `dist` フォルダの内容をリポジトリの `gh-pages` ブランチにプッシュするか、GitHub Actionsを使用して自動デプロイを設定してください。
+
+## 💡 特徴
+- **完全ローカル動作**: サーバーやAPIキーの設定なしで、ブラウザだけで動作します。
+- **自動保存**: 入力した内容はブラウザの `localStorage` に即座に保存されます。
+- **CSV連携**: 「CSV書き出し」でバックアップを取り、「CSV読み込み」で別のPCや環境へデータを移行できます。
+- **マスタ設定**: 担当者、バージョン、優先度を自由にカスタマイズ可能です。
