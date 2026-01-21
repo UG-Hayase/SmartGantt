@@ -42,8 +42,9 @@ const GanttChart: React.FC<GanttChartProps> = ({
   const headerScrollRef = useRef<HTMLDivElement>(null);
 
   const timelineDates = useMemo(() => {
-    const start = new Date('2025-01-01');
-    const end = addDays(start, 120);
+    // 基準日を2026年に設定
+    const start = new Date('2026-01-01');
+    const end = addDays(start, 180); // 180日分表示
     return getDaysInInterval(start, end);
   }, []);
 
@@ -106,7 +107,6 @@ const GanttChart: React.FC<GanttChartProps> = ({
 
   const handleDragOver = (e: React.DragEvent, targetId: string) => {
     e.preventDefault();
-    // 自分自身へのドロップは無効
     if (targetId === `ticket-${draggedTicketId}`) return;
     setDropTargetId(targetId);
   };
@@ -118,7 +118,6 @@ const GanttChart: React.FC<GanttChartProps> = ({
     const updates: Partial<Ticket> = {};
     const draggedTicket = tickets.find(t => t.id === draggedTicketId);
 
-    // 担当者ソート時は担当者変更を処理
     if (config.sortBy === 'assigneeId') {
       const newAid = targetAssigneeId === 'unassigned' ? '' : (targetAssigneeId || '');
       if (draggedTicket && draggedTicket.assigneeId !== newAid) {
@@ -126,12 +125,8 @@ const GanttChart: React.FC<GanttChartProps> = ({
       }
     }
 
-    // ターゲットがチケットの場合、親子関係も更新（自分自身でなければ）
     if (targetTicketId && targetTicketId !== draggedTicketId) {
       updates.parentId = targetTicketId;
-    } else if (!targetTicketId && config.sortBy !== 'assigneeId') {
-      // チケット以外へのドロップでソート中でないなら親子解除（オプション的な挙動）
-      // 今回は明示的な要望がないため、担当者ソート時は親子関係解除までは自動で行わない
     }
 
     if (Object.keys(updates).length > 0) {
@@ -240,12 +235,21 @@ const GanttChart: React.FC<GanttChartProps> = ({
         </div>
         <div className="flex-1 overflow-hidden" ref={headerScrollRef}>
           <div className="flex" style={{ width: totalWidth }}>
-            {timelineDates.map((date, idx) => (
-              <div key={idx} className="shrink-0 text-center border-l border-gray-200 text-[10px] py-2 relative" style={{ width: DAY_WIDTH }}>
-                {date.getDate() === 1 && <span className="absolute top-0 left-1 font-bold text-gray-700 bg-white/80 px-1 rounded">{date.getMonth()+1}月</span>}
-                {date.getDate()}
-              </div>
-            ))}
+            {timelineDates.map((date, idx) => {
+              const isMonthStart = date.getDate() === 1 || idx === 0;
+              const isYearStart = date.getMonth() === 0 && date.getDate() === 1;
+              return (
+                <div key={idx} className="shrink-0 text-center border-l border-gray-200 text-[10px] py-2 relative" style={{ width: DAY_WIDTH }}>
+                  {isMonthStart && (
+                    <span className="absolute top-0 left-1 font-bold text-gray-700 bg-white/80 px-1 rounded whitespace-nowrap z-10 shadow-sm border border-gray-100">
+                      {(isYearStart || idx === 0) ? `${date.getFullYear()}年 ` : ''}
+                      {date.getMonth()+1}月
+                    </span>
+                  )}
+                  {date.getDate()}
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>

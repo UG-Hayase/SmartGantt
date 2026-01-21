@@ -58,10 +58,16 @@ const TicketTable: React.FC<TicketTableProps> = ({ tickets, users, versions, pri
                     <span className="font-medium">{assignee?.name || '未割当'}</span>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-gray-600 font-mono">{ticket.dueDate}</td>
+                <td className="px-4 py-3 text-gray-600 font-mono">
+                  {/* 年を明確に表示するためにハイフンをスラッシュに置換 */}
+                  {ticket.dueDate.replace(/-/g, '/')}
+                </td>
                 <td className="px-4 py-3">
-                  <div className="w-full bg-gray-100 rounded-full h-1.5 mt-2">
-                    <div className="bg-blue-600 h-1.5 rounded-full" style={{ width: `${ticket.progress}%` }}></div>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] text-gray-400 font-bold">{ticket.progress}%</span>
+                    <div className="w-full bg-gray-100 rounded-full h-1.5">
+                      <div className="bg-blue-600 h-1.5 rounded-full transition-all duration-300" style={{ width: `${ticket.progress}%` }}></div>
+                    </div>
                   </div>
                 </td>
               </tr>

@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 
 // ソースコードの最終更新日時（生成日時）: 最新の出力時間を反映
-const APP_SOURCE_UPDATED_AT = "2026/01/21 17:50:00";
+const APP_SOURCE_UPDATED_AT = "2026/01/21 19:25:00";
 
 const App: React.FC = () => {
   const [view, setView] = useState<'gantt' | 'table' | 'master'>('gantt');
