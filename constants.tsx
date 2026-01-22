@@ -25,13 +25,13 @@ export const INITIAL_USERS: User[] = [
 ];
 
 export const INITIAL_VERSIONS: Version[] = [
-  { id: 'v1', name: 'v1.0.0 Release' },
+  { id: 'v1', name: 'v1.0.0 Release', isDefault: true },
   { id: 'v2', name: 'v1.1.0 Feature' },
 ];
 
 export const INITIAL_PRIORITIES: PriorityOption[] = [
   { id: 'p1', name: '低', color: 'text-gray-500' },
-  { id: 'p2', name: '通常', color: 'text-blue-500' },
+  { id: 'p2', name: '通常', color: 'text-blue-500', isDefault: true },
   { id: 'p3', name: '高', color: 'text-orange-500' },
   { id: 'p4', name: '急ぎ', color: 'text-red-500' },
 ];

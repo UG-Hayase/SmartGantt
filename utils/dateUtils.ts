@@ -33,3 +33,8 @@ export const isSameDay = (d1: Date, d2: Date): boolean => {
          d1.getMonth() === d2.getMonth() &&
          d1.getDate() === d2.getDate();
 };
+
+export const getJapaneseDay = (date: Date): string => {
+  const days = ['日', '月', '火', '水', '木', '金', '土'];
+  return days[date.getDay()];
+};

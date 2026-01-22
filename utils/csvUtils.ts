@@ -1,5 +1,5 @@
 
-import { Ticket, TicketStatus } from '../types';
+import { Ticket, Holiday, User } from '../types';
 
 /**
  * チケット配列をCSV文字列に変換
@@ -15,7 +15,6 @@ export const ticketsToCsv = (tickets: Ticket[]): string => {
     headers.map(header => {
       const val = (t as any)[header];
       const stringVal = val === null || val === undefined ? '' : String(val);
-      // カンマや改行を含む場合はダブルクォーテーションで囲む
       return `"${stringVal.replace(/"/g, '""')}"`;
     }).join(',')
   );
@@ -36,7 +35,6 @@ export const csvToTickets = (csvText: string): Ticket[] => {
   for (let i = 1; i < lines.length; i++) {
     if (!lines[i].trim()) continue;
     
-    // 単純なカンマ区切り（クォート内のカンマは考慮しない簡易版。高度なパースが必要な場合はライブラリ推奨）
     const values = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(v => v.replace(/^"|"$/g, '').replace(/""/g, '"'));
     
     const ticket: any = {};
@@ -58,10 +56,97 @@ export const csvToTickets = (csvText: string): Ticket[] => {
 };
 
 /**
+ * 祝日配列をCSV文字列に変換
+ */
+export const holidaysToCsv = (holidays: Holiday[]): string => {
+  const headers = ['date', 'name'];
+  const rows = holidays.map(h => [
+    `"${h.date}"`,
+    `"${h.name.replace(/"/g, '""')}"`
+  ].join(','));
+  return [headers.join(','), ...rows].join('\n');
+};
+
+/**
+ * CSV文字列を祝日配列に変換
+ */
+export const csvToHolidays = (csvText: string): Holiday[] => {
+  const lines = csvText.split(/\r?\n/);
+  if (lines.length <= 1) return [];
+
+  const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim().toLowerCase());
+  const holidays: Holiday[] = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    
+    const values = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(v => v.replace(/^"|"$/g, '').replace(/""/g, '"'));
+    
+    const holiday: any = { id: `h${Date.now()}-${i}` };
+    headers.forEach((header, index) => {
+      if (header === 'date' || header === 'name') {
+        holiday[header] = values[index];
+      }
+    });
+    
+    if (holiday.date && holiday.name) {
+      holidays.push(holiday as Holiday);
+    }
+  }
+
+  return holidays;
+};
+
+/**
+ * 担当者配列をCSV文字列に変換
+ */
+export const usersToCsv = (users: User[]): string => {
+  const headers = ['id', 'name', 'avatar'];
+  const rows = users.map(u => [
+    `"${u.id}"`,
+    `"${u.name.replace(/"/g, '""')}"`,
+    `"${u.avatar}"`
+  ].join(','));
+  return [headers.join(','), ...rows].join('\n');
+};
+
+/**
+ * CSV文字列を担当者配列に変換
+ */
+export const csvToUsers = (csvText: string): User[] => {
+  const lines = csvText.split(/\r?\n/);
+  if (lines.length <= 1) return [];
+
+  const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim().toLowerCase());
+  const users: User[] = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    
+    const values = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(v => v.replace(/^"|"$/g, '').replace(/""/g, '"'));
+    
+    const user: any = {};
+    headers.forEach((header, index) => {
+      if (['id', 'name', 'avatar'].includes(header)) {
+        user[header] = values[index];
+      }
+    });
+    
+    if (!user.id) user.id = `u${Date.now()}-${i}`;
+    if (!user.avatar) user.avatar = `https://picsum.photos/seed/${user.id}/40/40`;
+    
+    if (user.name) {
+      users.push(user as User);
+    }
+  }
+
+  return users;
+};
+
+/**
  * ファイルをダウンロードさせる
  */
 export const downloadFile = (content: string, fileName: string, contentType: string) => {
-  // 日本語の文字化けを防ぐためBOMを付与
   const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
   const blob = new Blob([bom, content], { type: contentType });
   const url = URL.createObjectURL(blob);

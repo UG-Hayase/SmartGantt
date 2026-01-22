@@ -3,6 +3,7 @@ import React from 'react';
 import { Ticket, User, Version, PriorityOption, GanttConfig } from '../types';
 import { STATUS_CONFIG } from '../constants';
 import { ArrowUp, ArrowDown, ArrowUpDown, AlertCircle } from 'lucide-react';
+import { getJapaneseDay } from '../utils/dateUtils';
 
 interface TicketTableProps {
   tickets: Ticket[];
@@ -36,6 +37,8 @@ const TicketTable: React.FC<TicketTableProps> = ({ tickets, users, versions, pri
             const statusCfg = STATUS_CONFIG[ticket.status];
             const priority = priorities.find(p => p.id === ticket.priorityId);
             const version = versions.find(v => v.id === ticket.versionId);
+            const dueDateObj = new Date(ticket.dueDate);
+            const dayOfWeek = getJapaneseDay(dueDateObj);
 
             return (
               <tr key={ticket.id} className="hover:bg-blue-50 cursor-pointer transition-colors" onClick={() => onSelectTicket(ticket)}>
@@ -58,9 +61,8 @@ const TicketTable: React.FC<TicketTableProps> = ({ tickets, users, versions, pri
                     <span className="font-medium">{assignee?.name || '未割当'}</span>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-gray-600 font-mono">
-                  {/* 年を明確に表示するためにハイフンをスラッシュに置換 */}
-                  {ticket.dueDate.replace(/-/g, '/')}
+                <td className="px-4 py-3 text-gray-600 font-mono whitespace-nowrap">
+                  {ticket.dueDate.replace(/-/g, '/')} ({dayOfWeek})
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-col gap-1">

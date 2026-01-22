@@ -10,12 +10,20 @@ export interface User {
 export interface Version {
   id: string;
   name: string;
+  isDefault?: boolean;
 }
 
 export interface PriorityOption {
   id: string;
   name: string;
   color: string; // Tailwind color class or Hex
+  isDefault?: boolean;
+}
+
+export interface Holiday {
+  id: string;
+  date: string; // YYYY-MM-DD
+  name: string;
 }
 
 export interface Ticket {
