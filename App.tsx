@@ -169,8 +169,12 @@ const App: React.FC = () => {
       if (selectedTicket) {
         updated = prev.map(t => t.id === selectedTicket.id ? { ...t, ...formData } : t);
       } else {
+        // IDを連番にするための計算
+        const maxId = prev.length > 0 
+          ? Math.max(...prev.map(t => parseInt(t.id) || 0)) 
+          : 0;
         const newTicket: Ticket = {
-          id: Math.floor(Math.random() * 9000 + 1000).toString(),
+          id: (maxId + 1).toString(),
           priorityId: '',
           assigneeId: '',
           versionId: '',
@@ -233,13 +237,11 @@ const App: React.FC = () => {
         valA = users.find(u => u.id === a.assigneeId)?.name || 'zzz';
         valB = users.find(u => u.id === b.assigneeId)?.name || 'zzz';
       } else if (config.sortBy === 'versionId') {
-        // マスターの表示順に合わせてソート
         valA = versions.findIndex(v => v.id === a.versionId);
         valB = versions.findIndex(v => v.id === b.versionId);
         if (valA === -1) valA = 999;
         if (valB === -1) valB = 999;
       } else if (config.sortBy === 'priorityId') {
-        // マスターの表示順に合わせてソート
         valA = priorities.findIndex(p => p.id === a.priorityId);
         valB = priorities.findIndex(p => p.id === b.priorityId);
         if (valA === -1) valA = 999;
