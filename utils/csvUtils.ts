@@ -1,12 +1,12 @@
 
-import { Ticket, Holiday, User } from '../types';
+import { Ticket, Holiday, User, Status } from '../types';
 
 /**
  * チケット配列をCSV文字列に変換
  */
 export const ticketsToCsv = (tickets: Ticket[]): string => {
   const headers = [
-    'id', 'subject', 'description', 'status', 'priorityId', 
+    'id', 'subject', 'description', 'statusId', 'priorityId', 
     'assigneeId', 'versionId', 'parentId', 'startDate', 
     'dueDate', 'progress', 'estimatedHours'
   ];
@@ -53,6 +53,44 @@ export const csvToTickets = (csvText: string): Ticket[] => {
   }
 
   return tickets;
+};
+
+/**
+ * ステータス配列をCSV文字列に変換
+ */
+export const statusesToCsv = (statuses: Status[]): string => {
+  const headers = ['id', 'name', 'color', 'isDefault'];
+  const rows = statuses.map(s => [
+    `"${s.id}"`,
+    `"${s.name.replace(/"/g, '""')}"`,
+    `"${s.color}"`,
+    `"${s.isDefault ? 'true' : 'false'}"`
+  ].join(','));
+  return [headers.join(','), ...rows].join('\n');
+};
+
+/**
+ * CSV文字列をステータス配列に変換
+ */
+export const csvToStatuses = (csvText: string): Status[] => {
+  const lines = csvText.split(/\r?\n/);
+  if (lines.length <= 1) return [];
+
+  const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim().toLowerCase());
+  const statuses: Status[] = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    const values = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(v => v.replace(/^"|"$/g, '').replace(/""/g, '"'));
+    const status: any = {};
+    headers.forEach((header, index) => {
+      let val: any = values[index];
+      if (header === 'isdefault') val = val === 'true';
+      status[header === 'isdefault' ? 'isDefault' : header] = val;
+    });
+    if (status.name) statuses.push(status as Status);
+  }
+  return statuses;
 };
 
 /**

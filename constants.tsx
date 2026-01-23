@@ -1,22 +1,15 @@
 
-import React from 'react';
-import { 
-  CheckCircle2, 
-  Clock, 
-  PlayCircle, 
-  XCircle, 
-} from 'lucide-react';
-import { TicketStatus, User, Version, PriorityOption } from './types';
-
-export const STATUS_CONFIG: Record<TicketStatus, { color: string; icon: React.ReactNode }> = {
-  'New': { color: 'bg-blue-100 text-blue-700', icon: <Clock size={14} /> },
-  'In Progress': { color: 'bg-yellow-100 text-yellow-700', icon: <PlayCircle size={14} /> },
-  'Resolved': { color: 'bg-green-100 text-green-700', icon: <CheckCircle2 size={14} /> },
-  'Closed': { color: 'bg-gray-100 text-gray-700', icon: <XCircle size={14} /> },
-};
+import { Status, User, Version, PriorityOption } from './types';
 
 export const DAY_WIDTH = 40;
 export const ROW_HEIGHT = 48;
+
+export const INITIAL_STATUSES: Status[] = [
+  { id: 's1', name: '新規', color: 'bg-blue-100 text-blue-700', isDefault: true },
+  { id: 's2', name: '進行中', color: 'bg-yellow-100 text-yellow-700' },
+  { id: 's3', name: '解決', color: 'bg-green-100 text-green-700' },
+  { id: 's4', name: '終了', color: 'bg-gray-100 text-gray-700' },
+];
 
 export const INITIAL_USERS: User[] = [
   { id: 'u1', name: '田中 太郎', avatar: 'https://picsum.photos/seed/u1/40/40' },

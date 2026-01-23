@@ -1,7 +1,7 @@
 
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { Ticket, User, Version, PriorityOption, GanttConfig, TicketStatus, Holiday } from './types';
-import { INITIAL_USERS, INITIAL_VERSIONS, INITIAL_PRIORITIES } from './constants';
+import { Ticket, User, Version, PriorityOption, GanttConfig, Status, Holiday } from './types';
+import { INITIAL_USERS, INITIAL_VERSIONS, INITIAL_PRIORITIES, INITIAL_STATUSES } from './constants';
 import GanttChart from './components/GanttChart';
 import TicketTable from './components/TicketTable';
 import TicketForm from './components/TicketForm';
@@ -18,17 +18,17 @@ import {
   Save,
   Trash2,
   Settings2,
-  Loader2,
   History,
   Code2
 } from 'lucide-react';
 
-const APP_SOURCE_UPDATED_AT = "2025/05/20 18:15:00";
+const APP_SOURCE_UPDATED_AT = "2025/05/20 23:55:00";
 
 const App: React.FC = () => {
   const [view, setView] = useState<'gantt' | 'table' | 'master'>('gantt');
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [users, setUsers] = useState<User[]>(INITIAL_USERS);
+  const [statuses, setStatuses] = useState<Status[]>(INITIAL_STATUSES);
   const [versions, setVersions] = useState<Version[]>(INITIAL_VERSIONS);
   const [priorities, setPriorities] = useState<PriorityOption[]>(INITIAL_PRIORITIES);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
@@ -52,13 +52,14 @@ const App: React.FC = () => {
     filterByStatus: null,
     filterByPriority: null,
     filterByVersion: null,
-    sortBy: 'dueDate',
+    sortBy: 'id',
     sortOrder: 'asc'
   });
 
   useEffect(() => {
     const savedTickets = localStorage.getItem('smart_gantt_tickets');
     const savedUsers = localStorage.getItem('smart_gantt_users');
+    const savedStatuses = localStorage.getItem('smart_gantt_statuses');
     const savedVersions = localStorage.getItem('smart_gantt_versions');
     const savedPriorities = localStorage.getItem('smart_gantt_priorities');
     const savedHolidays = localStorage.getItem('smart_gantt_holidays');
@@ -67,6 +68,7 @@ const App: React.FC = () => {
 
     if (savedTickets) setTickets(JSON.parse(savedTickets));
     if (savedUsers) setUsers(JSON.parse(savedUsers));
+    if (savedStatuses) setStatuses(JSON.parse(savedStatuses));
     if (savedVersions) setVersions(JSON.parse(savedVersions));
     if (savedPriorities) setPriorities(JSON.parse(savedPriorities));
     if (savedHolidays) setHolidays(JSON.parse(savedHolidays));
@@ -80,6 +82,7 @@ const App: React.FC = () => {
     if (!isLoading) {
       localStorage.setItem('smart_gantt_tickets', JSON.stringify(tickets));
       localStorage.setItem('smart_gantt_users', JSON.stringify(users));
+      localStorage.setItem('smart_gantt_statuses', JSON.stringify(statuses));
       localStorage.setItem('smart_gantt_versions', JSON.stringify(versions));
       localStorage.setItem('smart_gantt_priorities', JSON.stringify(priorities));
       localStorage.setItem('smart_gantt_holidays', JSON.stringify(holidays));
@@ -89,7 +92,7 @@ const App: React.FC = () => {
       });
       setLastSaved(now);
     }
-  }, [tickets, users, versions, priorities, holidays, isLoading]);
+  }, [tickets, users, statuses, versions, priorities, holidays, isLoading]);
 
   const handleExportCsv = () => {
     const csvContent = ticketsToCsv(tickets);
@@ -169,18 +172,18 @@ const App: React.FC = () => {
       if (selectedTicket) {
         updated = prev.map(t => t.id === selectedTicket.id ? { ...t, ...formData } : t);
       } else {
-        // IDを連番にするための計算
         const maxId = prev.length > 0 
           ? Math.max(...prev.map(t => parseInt(t.id) || 0)) 
           : 0;
+        const defaultStatus = statuses.find(s => s.isDefault) || statuses[0];
         const newTicket: Ticket = {
           id: (maxId + 1).toString(),
           priorityId: '',
+          statusId: defaultStatus?.id || '',
           assigneeId: '',
           versionId: '',
           subject: '',
           description: '',
-          status: 'New',
           startDate: new Date().toISOString().split('T')[0],
           dueDate: new Date().toISOString().split('T')[0],
           progress: 0,
@@ -208,6 +211,7 @@ const App: React.FC = () => {
     if (confirm("すべてのデータを削除して初期状態に戻しますか？")) {
       setTickets([]);
       setUsers(INITIAL_USERS);
+      setStatuses(INITIAL_STATUSES);
       setVersions(INITIAL_VERSIONS);
       setPriorities(INITIAL_PRIORITIES);
       setHolidays([]);
@@ -225,35 +229,12 @@ const App: React.FC = () => {
       result = result.filter(t => t.subject.toLowerCase().includes(query) || t.id.toLowerCase().includes(query));
     }
     if (config.filterByAssignee) result = result.filter(t => t.assigneeId === config.filterByAssignee);
-    if (config.filterByStatus) result = result.filter(t => t.status === config.filterByStatus);
+    if (config.filterByStatus) result = result.filter(t => t.statusId === config.filterByStatus);
     if (config.filterByPriority) result = result.filter(t => t.priorityId === config.filterByPriority);
     if (config.filterByVersion) result = result.filter(t => t.versionId === config.filterByVersion);
     
-    return result.sort((a, b) => {
-      let valA: any = a[config.sortBy] || '';
-      let valB: any = b[config.sortBy] || '';
-
-      if (config.sortBy === 'assigneeId') {
-        valA = users.find(u => u.id === a.assigneeId)?.name || 'zzz';
-        valB = users.find(u => u.id === b.assigneeId)?.name || 'zzz';
-      } else if (config.sortBy === 'versionId') {
-        valA = versions.findIndex(v => v.id === a.versionId);
-        valB = versions.findIndex(v => v.id === b.versionId);
-        if (valA === -1) valA = 999;
-        if (valB === -1) valB = 999;
-      } else if (config.sortBy === 'priorityId') {
-        valA = priorities.findIndex(p => p.id === a.priorityId);
-        valB = priorities.findIndex(p => p.id === b.priorityId);
-        if (valA === -1) valA = 999;
-        if (valB === -1) valB = 999;
-      }
-
-      const order = config.sortOrder === 'asc' ? 1 : -1;
-      if (valA < valB) return -1 * order;
-      if (valA > valB) return 1 * order;
-      return 0;
-    });
-  }, [tickets, config, searchQuery, users, versions, priorities]);
+    return result;
+  }, [tickets, config, searchQuery]);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden text-gray-800">
@@ -263,7 +244,7 @@ const App: React.FC = () => {
             <div className="bg-blue-600 p-2 rounded-lg text-white shadow-lg shadow-blue-200"><GanttChartIcon size={20} /></div>
             <div>
               <h1 className="font-bold text-lg tracking-tight leading-none">SmartGantt</h1>
-              <p className="text-[10px] text-gray-400 font-medium tracking-widest uppercase mt-1">Local Edition</p>
+              <p className="text-[10px] text-gray-400 font-medium tracking-widest uppercase mt-1">Workday Aware Edition</p>
             </div>
           </div>
           <div className="flex items-center gap-1.5 text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
@@ -305,12 +286,9 @@ const App: React.FC = () => {
         </div>
         {showFilters && view !== 'master' && (
           <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-4 animate-in slide-in-from-top-2">
-            <select value={config.filterByStatus || ''} onChange={(e) => setConfig({...config, filterByStatus: (e.target.value as TicketStatus) || null})} className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs">
+            <select value={config.filterByStatus || ''} onChange={(e) => setConfig({...config, filterByStatus: e.target.value || null})} className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs">
               <option value="">すべてのステータス</option>
-              <option value="New">新規</option>
-              <option value="In Progress">進行中</option>
-              <option value="Resolved">解決</option>
-              <option value="Closed">終了</option>
+              {statuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
             <select value={config.filterByPriority || ''} onChange={(e) => setConfig({...config, filterByPriority: e.target.value || null})} className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs">
               <option value="">すべての優先度</option>
@@ -329,9 +307,9 @@ const App: React.FC = () => {
       </div>
 
       <main className="flex-1 overflow-hidden p-4 bg-gray-50/50">
-        {view === 'gantt' && <GanttChart tickets={filteredTickets} users={users} priorities={priorities} versions={versions} config={config} holidays={holidays} onUpdateTicket={updateTicket} onToggleSort={toggleSort} onSelectTicket={(t) => { setSelectedTicket(t); setShowForm(true); }} />}
-        {view === 'table' && <TicketTable tickets={filteredTickets} users={users} versions={versions} priorities={priorities} config={config} onToggleSort={toggleSort} onSelectTicket={(t) => { setSelectedTicket(t); setShowForm(true); }} />}
-        {view === 'master' && <MasterDataView users={users} versions={versions} priorities={priorities} holidays={holidays} onUpdateUsers={setUsers} onUpdateVersions={setVersions} onUpdatePriorities={setPriorities} onUpdateHolidays={setHolidays} />}
+        {view === 'gantt' && <GanttChart tickets={filteredTickets} users={users} statuses={statuses} priorities={priorities} versions={versions} config={config} holidays={holidays} onUpdateTicket={updateTicket} onToggleSort={toggleSort} onSelectTicket={(t) => { setSelectedTicket(t); setShowForm(true); }} />}
+        {view === 'table' && <TicketTable tickets={filteredTickets} users={users} statuses={statuses} versions={versions} priorities={priorities} config={config} onToggleSort={toggleSort} onSelectTicket={(t) => { setSelectedTicket(t); setShowForm(true); }} />}
+        {view === 'master' && <MasterDataView users={users} statuses={statuses} versions={versions} priorities={priorities} holidays={holidays} onUpdateUsers={setUsers} onUpdateStatuses={setStatuses} onUpdateVersions={setVersions} onUpdatePriorities={setPriorities} onUpdateHolidays={setHolidays} />}
       </main>
 
       <footer className="h-8 bg-white border-t border-gray-200 px-6 flex items-center justify-between shrink-0 text-[10px] text-gray-400 font-medium">
@@ -346,7 +324,7 @@ const App: React.FC = () => {
       {showForm && (
         <>
           <div className="fixed inset-0 bg-black/40 z-40 backdrop-blur-[2px]" onClick={() => setShowForm(false)} />
-          <TicketForm ticket={selectedTicket} tickets={tickets} users={users} versions={versions} priorities={priorities} onClose={() => setShowForm(false)} onSave={saveTicket} onDelete={deleteTicket} />
+          <TicketForm ticket={selectedTicket} tickets={tickets} users={users} statuses={statuses} versions={versions} priorities={priorities} holidays={holidays} onClose={() => setShowForm(false)} onSave={saveTicket} onDelete={deleteTicket} />
         </>
       )}
     </div>

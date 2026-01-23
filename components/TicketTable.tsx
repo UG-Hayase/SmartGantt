@@ -1,13 +1,13 @@
 
 import React from 'react';
-import { Ticket, User, Version, PriorityOption, GanttConfig } from '../types';
-import { STATUS_CONFIG } from '../constants';
+import { Ticket, User, Version, PriorityOption, GanttConfig, Status } from '../types';
 import { ArrowUp, ArrowDown, ArrowUpDown, AlertCircle, Clock } from 'lucide-react';
 import { getJapaneseDay } from '../utils/dateUtils';
 
 interface TicketTableProps {
   tickets: Ticket[];
   users: User[];
+  statuses: Status[];
   versions: Version[];
   priorities: PriorityOption[];
   config: GanttConfig;
@@ -15,7 +15,7 @@ interface TicketTableProps {
   onSelectTicket: (ticket: Ticket) => void;
 }
 
-const TicketTable: React.FC<TicketTableProps> = ({ tickets, users, versions, priorities, config, onToggleSort, onSelectTicket }) => {
+const TicketTable: React.FC<TicketTableProps> = ({ tickets, users, statuses, versions, priorities, config, onToggleSort, onSelectTicket }) => {
   const SortHeader = ({ label, sortKey }: { label: string, sortKey: keyof Ticket }) => {
     const isActive = config.sortBy === sortKey;
     return (
@@ -39,7 +39,7 @@ const TicketTable: React.FC<TicketTableProps> = ({ tickets, users, versions, pri
         <thead>
           <tr className="bg-gray-50 border-b border-gray-200">
             <SortHeader label="ID" sortKey="id" />
-            <SortHeader label="ステータス" sortKey="status" />
+            <SortHeader label="ステータス" sortKey="statusId" />
             <SortHeader label="優先度" sortKey="priorityId" />
             <SortHeader label="題名" sortKey="subject" />
             <SortHeader label="バージョン" sortKey="versionId" />
@@ -53,7 +53,7 @@ const TicketTable: React.FC<TicketTableProps> = ({ tickets, users, versions, pri
         <tbody className="divide-y divide-gray-100">
           {tickets.map(ticket => {
             const assignee = users.find(u => u.id === ticket.assigneeId);
-            const statusCfg = STATUS_CONFIG[ticket.status];
+            const status = statuses.find(s => s.id === ticket.statusId);
             const priority = priorities.find(p => p.id === ticket.priorityId);
             const version = versions.find(v => v.id === ticket.versionId);
             
@@ -66,9 +66,11 @@ const TicketTable: React.FC<TicketTableProps> = ({ tickets, users, versions, pri
               <tr key={ticket.id} className="hover:bg-blue-50/30 cursor-pointer transition-colors" onClick={() => onSelectTicket(ticket)}>
                 <td className="px-4 py-4 text-gray-500 font-mono text-xs">#{ticket.id}</td>
                 <td className="px-4 py-4">
-                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${statusCfg?.color || 'bg-gray-100 text-gray-600'}`}>
-                    {statusCfg?.icon} {ticket.status}
-                  </span>
+                  {status && (
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${status.color}`}>
+                      {status.name}
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-4">
                   <span className={`inline-flex items-center gap-1.5 font-bold text-xs ${priority?.color || 'text-gray-400'}`}>

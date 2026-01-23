@@ -1,5 +1,10 @@
 
-export type TicketStatus = 'New' | 'In Progress' | 'Resolved' | 'Closed';
+export interface Status {
+  id: string;
+  name: string;
+  color: string; // Tailwind color class
+  isDefault?: boolean;
+}
 
 export interface User {
   id: string;
@@ -30,8 +35,8 @@ export interface Ticket {
   id: string;
   subject: string;
   description: string;
-  status: TicketStatus;
-  priorityId: string; // Changed from priority: Priority
+  statusId: string; // Changed from status: TicketStatus
+  priorityId: string;
   assigneeId: string;
   versionId: string;
   parentId: string | null;
@@ -45,7 +50,7 @@ export interface GanttConfig {
   zoom: 'day' | 'week' | 'month';
   showResources: boolean;
   filterByAssignee: string | null;
-  filterByStatus: TicketStatus | null;
+  filterByStatus: string | null; // Changed to string (ID)
   filterByPriority: string | null;
   filterByVersion: string | null;
   sortBy: keyof Ticket;
